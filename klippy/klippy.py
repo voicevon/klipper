@@ -132,6 +132,7 @@ class Printer:
     def _connect(self, eventtime):
         try:
             self._read_config()
+            self.send_event("klippy:mcu_identify")
             for cb in self.event_handlers.get("klippy:connect", []):
                 if self.state_message is not message_startup:
                     return
@@ -143,10 +144,12 @@ class Printer:
         except msgproto.error as e:
             logging.exception("Protocol error")
             self._set_state("%s%s" % (str(e), message_protocol_error))
+            util.dump_mcu_build()
             return
         except mcu.error as e:
             logging.exception("MCU error during connect")
             self._set_state("%s%s" % (str(e), message_mcu_connect_error))
+            util.dump_mcu_build()
             return
         except Exception as e:
             logging.exception("Unhandled exception during connect")
@@ -187,6 +190,7 @@ class Printer:
     def invoke_shutdown(self, msg):
         if self.is_shutdown:
             return
+        logging.error("Transition to shutdown state: %s", msg)
         self.is_shutdown = True
         self._set_state("%s%s" % (msg, message_shutdown))
         for cb in self.event_handlers.get("klippy:shutdown", []):

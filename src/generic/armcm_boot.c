@@ -5,11 +5,18 @@
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
 #include "armcm_boot.h" // DECL_ARMCM_IRQ
-#include "board/internal.h" // SystemInit
+#include "autoconf.h" // CONFIG_MCU
+#include "board/internal.h" // SysTick
+#include "command.h" // DECL_CONSTANT_STR
+#include "misc.h" // dynmem_start
+
+// Export MCU type
+DECL_CONSTANT_STR("MCU", CONFIG_MCU);
 
 // Symbols created by armcm_link.lds.S linker script
 extern uint32_t _data_start, _data_end, _data_flash;
 extern uint32_t _bss_start, _bss_end, _stack_start;
+extern uint32_t _stack_end;
 
 
 /****************************************************************
@@ -20,6 +27,13 @@ extern uint32_t _bss_start, _bss_end, _stack_start;
 void
 ResetHandler(void)
 {
+    // Disable SysTick irq (for some bootloaders that don't)
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk;
+
+    // Explicitly load the stack pointer (for some bootloaders that don't)
+    asm volatile("mov sp, %0" : : "r"(&_stack_end));
+    barrier();
+
     // Copy global variables from flash to ram
     uint32_t count = (&_data_end - &_data_start) * 4;
     __builtin_memcpy(&_data_start, &_data_flash, count);
@@ -32,14 +46,10 @@ ResetHandler(void)
     // Initializing the C library isn't needed...
     //__libc_init_array();
 
-    // Initialize the machine
-    SystemInit();
+    // Run the main board specific code
+    armcm_main();
 
-    // Run the main code
-    extern int main(void);
-    main();
-
-    // The main() call should not return
+    // The armcm_main() call should not return
     for (;;)
         ;
 }
